@@ -777,7 +777,7 @@ public sealed partial class MainWindow : Window
             ShowNotice(image.Installation.StartsWith("Server", StringComparison.OrdinalIgnoreCase) ||
                 image.Name.Contains("Windows Server", StringComparison.OrdinalIgnoreCase) ?
                 UiText.Get("Image.ServerUnsupported") : UiText.FromEnglish("This edition is not supported."),
-                UiText.FromEnglish("Choose a Windows 11 client image, 22H2 or newer, in x64 or ARM64 format."), InfoBarSeverity.Warning);
+                UiText.FromEnglish("Choose a Windows 11 client image, 21H2 or newer, in x64 or ARM64 format."), InfoBarSeverity.Warning);
         UpdateNavigation();
     }
 

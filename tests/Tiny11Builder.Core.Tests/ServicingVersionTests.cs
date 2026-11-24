@@ -11,6 +11,8 @@ public sealed class ServicingVersionTests
         new(1, "Windows 11 Pro", "", "x64", new(10, 0, build, 9457), "Professional", "Client", 1);
 
     [Theory]
+    [InlineData(22000, 1, 22000)]
+    [InlineData(22621, 1, 22000)]
     [InlineData(26100, 6584, 26300)]
     [InlineData(26100, 9457, 26300)]
     [InlineData(26100, 1, 26200)]
@@ -30,6 +32,7 @@ public sealed class ServicingVersionTests
 
     [Theory]
     [InlineData(19041, 22621)]
+    [InlineData(19044, 22000)]
     [InlineData(22621, 26100)]
     [InlineData(26100, 28000)]
     [InlineData(26100, 29691)]

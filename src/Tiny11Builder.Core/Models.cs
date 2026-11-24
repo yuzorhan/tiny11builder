@@ -28,8 +28,10 @@ public sealed record WindowsImage(
     int Index, string Name, string Description, string Architecture,
     Version Version, string Edition, string Installation, long Size)
 {
+    // 22000 is Windows 11 21H2, the first Windows 11 release. Windows 10 (1904x and older) stays out of scope.
+    public const int MinimumBuild = 22000;
     public string Summary => $"{Name}  |  {Architecture}  |  build {Version.Build}.{Version.Revision}";
-    public bool IsSupported => Index > 0 && Size > 0 && Version.Major == 10 && Version.Build >= 22621 &&
+    public bool IsSupported => Index > 0 && Size > 0 && Version.Major == 10 && Version.Build >= MinimumBuild &&
         Installation.Equals("Client", StringComparison.OrdinalIgnoreCase) && Architecture is "x64" or "arm64";
 
     public void Validate()
@@ -38,7 +40,7 @@ public sealed record WindowsImage(
             throw new InvalidDataException("Tiny11 Builder supports Windows 11 client images only. Windows Server images are not supported.");
         if (!IsSupported)
             throw new InvalidDataException(
-                "Choose a Windows 11 client image, build 22621 (22H2) or newer, in x64 or ARM64 format.");
+                "Choose a Windows 11 client image, build 22000 (21H2) or newer, in x64 or ARM64 format.");
     }
 }
 

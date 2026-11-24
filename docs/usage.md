@@ -118,7 +118,7 @@ extreme removal profile. Its source, workspace, output and tool paths are
 empty intentionally: loading it keeps your current local paths and selected
 edition, or lets you choose any supported Windows 11 ISO afterward. It is
 not tied to a prepared image, language, edition or architecture. Supported
-means Windows 11 client x64/ARM64, 22H2 or newer, with compatible tools;
+means Windows 11 client x64/ARM64, 21H2 or newer, with compatible tools;
 unknown Insider builds still need a compatible engine.
 
 Every selected removal group appears **checked** in Components, including
@@ -351,12 +351,14 @@ around by disabling certificate validation. Follow the reported trust problem
 and use a current complete Microsoft toolset.
 Windows Server images are outside the supported client-image scope.
 
-The engine accepts **Windows 11 client builds 22621 (22H2) and newer**, including
-23H2, 24H2, 25H2, 26H2 and Insider/Canary media, in **x64 and ARM64**, without a
-hard-coded maximum build number. Image architecture, edition and version are
-read from DISM, not inferred from the ISO filename. Package/capability/feature
-identities come from the mounted image, so missing items are logged as *not
-present*, rather than guessed.
+The engine accepts **Windows 11 client builds 22000 (21H2) and newer**,
+including 22H2, 23H2, 24H2, 25H2, 26H2 and Insider/Canary media, in **x64 and
+ARM64**, without a hard-coded maximum build number. 21H2 is out of Microsoft
+support, so it is offered for rebuilding media you already have, not as a
+recommended base. Image architecture, edition and version are read from DISM,
+not inferred from the ISO filename. Package/capability/feature identities come
+from the mounted image, so missing items are logged as *not present*, rather
+than guessed.
 Edition names are decoded using the OEM code page Windows image tools write,
 with UTF byte-order marks recognized explicitly. Cyrillic text is not repaired
 by replacing fonts or guessing edition names. Invalid encoded output fails
@@ -372,7 +374,8 @@ Windows 10, including 22H2, can build Windows 11 images using compatible
 Microsoft deployment tools; the host's release number is not the requirement.
 The app checks the actual servicing providers rather than only the version of
 the `dism.exe` launcher. Known enablement releases share servicing bases:
-23H2 (22631) uses 22621; 25H2 (26200) and 26H2 (26300) use 26100.
+23H2 (22631) uses 22621; 25H2 (26200) and 26H2 (26300) use 26100. 21H2 (22000)
+is its own servicing base, so 22H2+ tools can service it.
 A 26100 tool is therefore not rejected merely because a 26H2 image reports 26300.
 Keep Windows/ADK servicing updates current.
 

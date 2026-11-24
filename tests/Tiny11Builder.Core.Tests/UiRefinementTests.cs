@@ -249,6 +249,21 @@ public sealed class LocalizationCatalogTests
     }
 
     [Fact]
+    public void Support_floor_copy_names_windows_11_21H2_in_the_welcome_page_and_every_catalog()
+    {
+        var document = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "Deployment", "MainWindow.xaml"));
+        XNamespace local = "using:Tiny11Builder.App";
+        var mappings = document.Descendants().Attributes(local + "Translation.Properties")
+            .Select(attribute => attribute.Value).ToArray();
+        Assert.Contains("Text=Text.Windows1121H2OrNewerX64AndARM64Insider", mappings);
+        Assert.Contains("21H2", LanguageCatalogs.English.Get("Text.Windows1121H2OrNewerX64AndARM64Insider"));
+        Assert.Contains("21H2", LanguageCatalogs.English.Get("Text.ChooseAWindows11ClientImage21H2OrNewer"));
+        var chinese = LanguageCatalogs.Resolve("zh-Hans", CultureInfo.GetCultureInfo("en-US"));
+        Assert.Contains("21H2", chinese.Get("Text.Windows1121H2OrNewerX64AndARM64Insider"));
+        Assert.Contains("21H2", chinese.Get("Text.ChooseAWindows11ClientImage21H2OrNewer"));
+    }
+
+    [Fact]
     public void Missing_translations_are_explicit_english_fallbacks_never_blank()
     {
         var chinese = LanguageCatalog.Parse(Catalog("zh-Hans", "\"Next\":\"下一步\""), SmallEnglish);

@@ -2,6 +2,8 @@ namespace Tiny11Builder.Core;
 
 internal static class WindowsImageIdentity
 {
+    // Enablement releases share the servicing base of the release they enable. 21H2 (22000) is a
+    // servicing base of its own, so 22621+ tools satisfy it and no folding entry is needed here.
     public static int ServicingBase(int build) => build switch
     {
         22631 => 22621,

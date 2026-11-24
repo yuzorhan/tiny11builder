@@ -10,6 +10,8 @@ namespace Tiny11Builder.Core.Tests;
 public sealed class CompatibilityTests
 {
     [Theory]
+    [InlineData(22000, "x64")]
+    [InlineData(22000, "arm64")]
     [InlineData(22621, "x64")]
     [InlineData(22621, "arm64")]
     [InlineData(22631, "x64")]
@@ -19,15 +21,25 @@ public sealed class CompatibilityTests
     [InlineData(28000, "x64")]
     [InlineData(29689, "arm64")]
     [InlineData(99999, "x64")]
-    public void Accepts_22H2_through_newer_and_Canary_without_an_upper_limit(int build, string architecture) =>
+    public void Accepts_21H2_through_newer_and_Canary_without_an_upper_limit(int build, string architecture) =>
         Image(build, architecture).Validate();
 
     [Theory]
-    [InlineData(22000, "x64", "Client")]
+    [InlineData(19044, "x64", "Client")]
+    [InlineData(19045, "x64", "Client")]
     [InlineData(22621, "x86", "Client")]
     [InlineData(29689, "arm64", "Server")]
     public void Rejects_non_supported_image_families(int build, string architecture, string installation) =>
         Assert.Throws<InvalidDataException>(() => (Image(build, architecture) with { Installation = installation }).Validate());
+
+    [Fact]
+    public void Windows_11_21H2_build_22000_is_supported_and_the_rejection_message_names_it()
+    {
+        Image(22000).Validate();
+        Assert.Equal(22000, WindowsImage.MinimumBuild);
+        var error = Assert.Throws<InvalidDataException>(() => Image(19045).Validate());
+        Assert.Contains("22000 (21H2)", error.Message);
+    }
 
     [Fact]
     public void Parses_actual_build_revision_and_empty_description()

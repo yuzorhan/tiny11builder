@@ -374,7 +374,11 @@ public sealed partial class MainWindow : Window
         if (busy || modalOpen || target <= step || target >= StepNavigation.StepCount) return;
         if (target >= 3 && UsesCore && !coreAcknowledged)
         {
-            coreAcknowledged = await Confirm(UiText.Get("Core.ConsentTitle"), UiText.Get("Core.ConsentBody"), UiText.Get("Core.Agree"));
+            // Nano11 removes far more than Core, so its agreement says so before the Core wording is reused.
+            coreAcknowledged = IsNano
+                ? await Confirm(UiText.Get("Text.Nano11RemovesFarMoreThanCore"),
+                    UiText.Get("Text.Nano11AlsoDeletesDefenderSearchHelloBitLocker"), UiText.Get("Core.Agree"))
+                : await Confirm(UiText.Get("Core.ConsentTitle"), UiText.Get("Core.ConsentBody"), UiText.Get("Core.Agree"));
             CoreConsentStatus.Text = UiText.Get(coreAcknowledged ? "Core.Accepted" : "Core.NotAccepted");
             if (!coreAcknowledged) return;
         }

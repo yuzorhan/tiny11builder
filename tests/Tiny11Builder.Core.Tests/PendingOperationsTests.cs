@@ -515,6 +515,9 @@ internal sealed class RecordingOperations(IImageOperations inner) : IImageOperat
     public void TrimCore(string mount, string architecture, Action<string> log, CancellationToken token, bool turboMode = false) =>
         inner.TrimCore(mount, architecture, log, token, turboMode);
 
+    public void TrimNano(string mount, string architecture, Action<string> log, CancellationToken token, bool turboMode = false) =>
+        inner.TrimNano(mount, architecture, log, token, turboMode);
+
     public IReadOnlyList<ImageCleanupResult> CleanRedundantData(string mount, Action<string> log, CancellationToken token) =>
         inner.CleanRedundantData(mount, log, token);
 }

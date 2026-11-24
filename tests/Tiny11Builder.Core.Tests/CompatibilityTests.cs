@@ -121,9 +121,9 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
-    public void Build_modes_have_exact_original_core_and_empty_custom_removal_sets()
+    public void Build_modes_have_exact_original_core_nano_and_empty_custom_removal_sets()
     {
-        Assert.Equal(3, Enum.GetValues<BuildMode>().Length);
+        Assert.Equal(4, Enum.GetValues<BuildMode>().Length);
         Assert.Equal(CleanupCatalog.ForPreset(CleanupPreset.Original), CleanupCatalog.ForMode(BuildMode.Tiny11));
         var core = CleanupCatalog.Options.Where(o => o.Minimal || o.Id is
             "language-extras" or "edge-files" or "onedrive-files" or
@@ -133,9 +133,38 @@ public sealed class CompatibilityTests
         Assert.Throws<ArgumentOutOfRangeException>(() => CleanupCatalog.ForMode((BuildMode)99));
     }
 
+    [Fact]
+    public void Nano11_extends_core_with_its_own_groups_and_never_leaks_into_other_presets()
+    {
+        var nano = CleanupCatalog.ForMode(BuildMode.Nano11);
+        var core = CleanupCatalog.ForMode(BuildMode.Tiny11Core);
+        Assert.All(core, id => Assert.Contains(id, nano));
+        Assert.Equal(nano.Length, nano.Distinct(StringComparer.Ordinal).Count());
+        var nanoOnly = CleanupCatalog.Options.Where(option => option.NanoOnly).ToArray();
+        Assert.Equal(5, nanoOnly.Length);
+        Assert.All(nanoOnly, option =>
+        {
+            Assert.Contains(option.Id, nano);
+            Assert.DoesNotContain(option.Id, core);
+            Assert.DoesNotContain(option.Id, CleanupCatalog.ForMode(BuildMode.Tiny11));
+        });
+        // The aggressive payload groups Nano11 always selects are the ones the UI calls out.
+        Assert.Contains("remove-ime-files", nano);
+        Assert.Contains("remove-speech-files", nano);
+        Assert.Contains("remove-print-drivers", nano);
+        Assert.Contains("remove-extra-media", nano);
+        Assert.Contains("paint", nano);
+        Assert.Contains("camera", nano);
+        Assert.Contains("terminal", nano);
+        Assert.Contains("oem", nano);
+        // Core, the eight payload/app groups Nano11 always adds, and its five preset-only groups, without overlap.
+        Assert.Equal(core.Length + 8 + nanoOnly.Length, nano.Length);
+    }
+
     [Theory]
     [InlineData(BuildMode.Tiny11, BuildFlavor.Regular)]
     [InlineData(BuildMode.Tiny11Core, BuildFlavor.Core)]
+    [InlineData(BuildMode.Nano11, BuildFlavor.Core)]
     public void Fixed_modes_require_their_exact_removals_and_flavor(BuildMode mode, BuildFlavor flavor)
     {
         var recipe = new BuildRecipe
@@ -168,6 +197,31 @@ public sealed class CompatibilityTests
     }
 
     [Fact]
+    public void Nano11_requires_core_removals_and_the_core_acknowledgement()
+    {
+        var nano = new BuildRecipe
+        {
+            Mode = BuildMode.Nano11, Flavor = BuildFlavor.Core, CoreAcknowledged = true,
+            SelectedOptions = CleanupCatalog.ForMode(BuildMode.Nano11)
+        };
+        nano.ValidateOptions();
+        Assert.Throws<InvalidDataException>(() => (nano with { CoreAcknowledged = false }).ValidateOptions());
+        Assert.Throws<InvalidDataException>(() => (nano with { Flavor = BuildFlavor.Regular }).ValidateOptions());
+        // Nano11 trimming cannot be bolted onto a serviced Custom build without Core and the expert acknowledgement.
+        var custom = new BuildRecipe
+        {
+            Mode = BuildMode.Custom, SelectedOptions = [CleanupCatalog.NanoIds.Payloads]
+        };
+        Assert.Throws<InvalidDataException>(custom.ValidateOptions);
+        new BuildRecipe
+        {
+            Mode = BuildMode.Custom, Flavor = BuildFlavor.Core, CoreAcknowledged = true, ExpertAcknowledged = true,
+            SelectedOptions = [CleanupCatalog.NanoIds.Payloads]
+        }.ValidateOptions();
+        Assert.Contains("Nano11", Assert.Throws<InvalidDataException>(custom.ValidateOptions).Message);
+    }
+
+    [Fact]
     public void Legacy_recipes_infer_modes_without_changing_custom_core_choices()
     {
         Assert.Equal(BuildMode.Tiny11, CleanupCatalog.ModeForRecipe(new()
@@ -180,6 +234,10 @@ public sealed class CompatibilityTests
         Assert.Equal(["camera"], modifiedCore.SelectedOptions);
         Assert.Equal(BuildMode.Custom, CleanupCatalog.ModeForRecipe(new()
         { Mode = BuildMode.Custom, SelectedOptions = CleanupCatalog.ForMode(BuildMode.Tiny11) }));
+        Assert.Equal(BuildMode.Nano11, CleanupCatalog.ModeForRecipe(new()
+        { Flavor = BuildFlavor.Core, SelectedOptions = CleanupCatalog.ForMode(BuildMode.Nano11) }));
+        Assert.Equal(BuildMode.Custom, CleanupCatalog.ModeForRecipe(new()
+        { Flavor = BuildFlavor.Core, SelectedOptions = CleanupCatalog.ForMode(BuildMode.Nano11).Append("camera").ToArray() }));
     }
 
     [Fact]

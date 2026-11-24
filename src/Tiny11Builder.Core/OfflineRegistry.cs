@@ -56,6 +56,41 @@ public sealed class OfflineRegistry : IOfflineRegistry
             Set(software, @"Policies\Microsoft\Windows Defender", "DisableAntiSpyware", 1, log);
             Set(software, @"Policies\Microsoft\Windows Defender\Real-Time Protection", "DisableRealtimeMonitoring", 1, log);
         }
+        if (recipe.SelectedOptions.Contains(CleanupCatalog.NanoIds.Services))
+            RemoveNanoServices(system, log);
+    }
+
+    // Nano11 deletes the services behind printing, remote registry, error reporting and device/appraisal tools.
+    // Every control set is edited because the mounted image is never the running system.
+    private static readonly string[] NanoServices =
+    [
+        "Spooler", "PrintNotify", "Fax", "RemoteRegistry", "diagsvc", "WerSvc", "PcaSvc",
+        "MapsBroker", "WalletService", "BthAvctpSvc", "BluetoothUserService"
+    ];
+
+    private static void RemoveNanoServices(RegistryKey system, Action<string> log)
+    {
+        foreach (var control in system.GetSubKeyNames().Where(key =>
+                     System.Text.RegularExpressions.Regex.IsMatch(key, @"^ControlSet\d{3}$")))
+        {
+            using var services = OpenWriteKey(system, control + @"\Services");
+            foreach (var name in NanoServices.Append("dmwappushservice"))
+            {
+                if (!services.GetSubKeyNames().Contains(name, StringComparer.OrdinalIgnoreCase))
+                {
+                    log($"Nano11: not present in {control}: service {name}");
+                    continue;
+                }
+                if (name.Equals("dmwappushservice", StringComparison.OrdinalIgnoreCase))
+                {
+                    Set(system, $@"{control}\Services\{name}", "Start", 4, log);
+                    log($"Nano11: disabled service {control}\\{name}");
+                    continue;
+                }
+                DeleteKeyTree(services, name);
+                log($"Nano11: deleted service {control}\\{name}. Shared executable files are not deleted.");
+            }
+        }
     }
 
     public void ApplySetupBypass(string mountDirectory, Action<string> log)

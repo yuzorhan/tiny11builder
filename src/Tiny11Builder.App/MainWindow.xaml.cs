@@ -156,9 +156,17 @@ public sealed partial class MainWindow : Window
     }
 
     private FrameworkElement[] Panels => [WelcomePanel, SourcePanel, CleanupPanel, SettingsPanel, ReviewPanel, BuildPanel];
-    private BuildMode SelectedMode => (BuildMode)ModeChoice.SelectedIndex;
-    private bool UsesCore => SelectedMode == BuildMode.Tiny11Core ||
+    // The card order is a product decision; the enum keeps its serialized values. ModeChoice follows this order,
+    // so its index is mapped here instead of being cast to the enum.
+    private static readonly BuildMode[] ModeOrder =
+        [BuildMode.Tiny11, BuildMode.Tiny11Core, BuildMode.Nano11, BuildMode.Custom];
+    private BuildMode SelectedMode => ModeChoice.SelectedIndex >= 0 && ModeChoice.SelectedIndex < ModeOrder.Length ?
+        ModeOrder[ModeChoice.SelectedIndex] : BuildMode.Tiny11;
+    private static int ModeIndex(BuildMode mode) => Array.IndexOf(ModeOrder, mode);
+    private bool UsesCore => SelectedMode is BuildMode.Tiny11Core or BuildMode.Nano11 ||
         (SelectedMode == BuildMode.Custom && CustomCoreCheck.IsOn);
+    private bool IsNano => SelectedMode == BuildMode.Nano11;
+    private string SelectedModeName => (ModeChoice.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
     private static string HostArchitecture => RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
 
     private void OnContentSizeChanged(object sender, SizeChangedEventArgs args) => UpdateWelcomeLayout();
@@ -174,8 +182,8 @@ public sealed partial class MainWindow : Window
         var padding = ContentScroller.Padding;
         WelcomePanel.MinHeight = Math.Max(0, ContentScroller.ActualHeight - padding.Top - padding.Bottom);
         var stacked = ContentScroller.ActualWidth - padding.Left - padding.Right < 560;
-        ArrangeModeCards(ModeCards, [RegularModeCard, CoreModeCard, CustomModeCard], stacked);
-        ArrangeModeCards(RemovalModeCards, [Tiny11Selection, CoreSelection, CustomSelection], stacked);
+        ArrangeModeCards(ModeCards, [RegularModeCard, CoreModeCard, NanoModeCard, CustomModeCard], stacked);
+        ArrangeModeCards(RemovalModeCards, [Tiny11Selection, CoreSelection, NanoSelection, CustomSelection], stacked);
         ArrangeSourceCards(ContentScroller.ActualWidth - padding.Left - padding.Right);
         ReviewCards.ColumnDefinitions[1].Width = stacked ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         FrameworkElement[] review = [ReviewImageCard, ReviewModeCard, ReviewPathsCard, ReviewOptionsCard];
@@ -324,7 +332,7 @@ public sealed partial class MainWindow : Window
         if (mode == BuildMode.Custom) await EnterCustomAsync(fromWelcome: true);
         else
         {
-            ModeChoice.SelectedIndex = (int)mode;
+            ModeChoice.SelectedIndex = ModeIndex(mode);
             GoStep(1);
         }
     }
@@ -335,7 +343,7 @@ public sealed partial class MainWindow : Window
         if (sender is Button { Tag: string tag } && Enum.TryParse<BuildMode>(tag, out var mode) && Enum.IsDefined(mode))
         {
             if (mode == BuildMode.Custom) await EnterCustomAsync(fromWelcome: false);
-            else ModeChoice.SelectedIndex = (int)mode;
+            else ModeChoice.SelectedIndex = ModeIndex(mode);
         }
     }
 
@@ -1078,18 +1086,22 @@ public sealed partial class MainWindow : Window
         var presetRemovesEdgeFiles = presetOptions.Any(option => option.Id == "edge-files");
         PresetOptionsList.ItemsSource = presetOptions.Select(option => new OptionChoice(option, presetRemovesEdgeFiles)).ToArray();
         PresetCoreDetails.Visibility = UsesCore ? Visibility.Visible : Visibility.Collapsed;
+        PresetNanoDetails.Visibility = IsNano ? Visibility.Visible : Visibility.Collapsed;
         CoreWarning.IsOpen = UsesCore;
+        NanoWarning.IsOpen = IsNano;
         CoreConsentStatus.Visibility = UsesCore ? Visibility.Visible : Visibility.Collapsed;
         CoreConsentStatus.Text = UiText.Get(coreAcknowledged ? "Core.Accepted" : "Core.WillAsk");
         ModeDescription.Text = UiText.FromEnglish(SelectedMode switch
         {
             BuildMode.Tiny11 => "Original Tiny11 removals, including Edge/WebView2 and OneDrive binaries. Windows Update, Defender and recovery are kept. Choose Custom to change individual removals.",
             BuildMode.Tiny11Core => "Tiny11 Core removals, including irreversible component pruning. Choose Custom to change individual removals.",
+            BuildMode.Nano11 => "Tiny11 Core removals plus Nano11 package, service, app, font and driver trimming for the smallest image. Not for daily use. Choose Custom to change individual removals.",
             _ => "Start with nothing selected, then choose what to remove or disable. You can also list individual components, including protected items."
         });
-        SourceMode.Text = UiText.Format("Mode.Selected", (ModeChoice.SelectedItem as ComboBoxItem)?.Content);
+        SourceMode.Text = UiText.Format("Mode.Selected", SelectedModeName);
         MarkChoice(Tiny11Selection, SelectedMode == BuildMode.Tiny11);
         MarkChoice(CoreSelection, SelectedMode == BuildMode.Tiny11Core);
+        MarkChoice(NanoSelection, SelectedMode == BuildMode.Nano11);
         MarkChoice(CustomSelection, SelectedMode == BuildMode.Custom);
     }
 
@@ -1203,7 +1215,7 @@ public sealed partial class MainWindow : Window
         var text = new StringBuilder();
         void Row(string key, object? value) => text.AppendLine(UiText.Format(key, value));
         Row("Review.Image", image?.Summary ?? UiText.Get("Image.NotInspected"));
-        Row("Review.Mode", (ModeChoice.SelectedItem as ComboBoxItem)?.Content);
+        Row("Review.Mode", SelectedModeName);
         if (SelectedMode == BuildMode.Custom) Row("Review.CoreRemovals", YesNo(UsesCore));
         if (recipe.IsoSizeLimitBytes is { } limit) Row("CustomMedia.ReviewLimit", limit);
         Row("Review.Source", recipe.SourcePath);
@@ -1228,6 +1240,7 @@ public sealed partial class MainWindow : Window
         text.AppendLine();
         text.AppendLine(UiText.Get("Review.UnselectedKept"));
         if (recipe.Flavor == BuildFlavor.Core) text.AppendLine(UiText.Get("Review.CoreWarning"));
+        if (SelectedMode == BuildMode.Nano11) text.AppendLine(UiText.Get("Review.NanoWarning"));
         if (recipe.ExpertActions.Length > 0) text.AppendLine(UiText.Get("Review.ExpertWarning"));
         text.AppendLine(UiText.Get("Review.PolicyWarning"));
         return text.ToString();
@@ -1248,9 +1261,10 @@ public sealed partial class MainWindow : Window
         var recipe = CreateRecipe();
         ReviewText.Text = CreateReview();
         ReviewImage.Text = image?.Summary ?? UiText.Get("Image.NoneSelected");
-        ReviewMode.Text = (ModeChoice.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
+        ReviewMode.Text = SelectedModeName;
         ReviewRemovals.Text = UiText.Format("Review.RemovalCounts", recipe.SelectedOptions.Length, recipe.ExpertActions.Length) + "\n" +
-            UiText.Get(UsesCore ? "Review.CoreEffects" : SelectedMode == BuildMode.Custom ? "Review.CustomEffects" : "Review.RegularEffects");
+            UiText.Get(IsNano ? "Review.NanoEffects" : UsesCore ? "Review.CoreEffects" :
+                SelectedMode == BuildMode.Custom ? "Review.CustomEffects" : "Review.RegularEffects");
         ReviewPaths.Text = UiText.Format("Review.Paths", recipe.OutputPath, recipe.WorkspacePath);
         ReviewOptions.Text = UiText.Format("Review.Options", CompressionLabel(recipe.Compression), OnOff(recipe.TurboMode),
             UiText.Get(recipe.RemoveRedundantData ? "Common.Remove" : "Common.Keep"),
@@ -1276,7 +1290,7 @@ public sealed partial class MainWindow : Window
         try { recipe = CreateRecipe(); recipe.ValidateOptions(); PathSafety.Validate(recipe); }
         catch (Exception error) { ShowNotice("The recipe is not ready.", ErrorText.Reason(error), InfoBarSeverity.Error); return; }
         if (!await Confirm("Create this offline Windows image?",
-            UiText.Format("Build.Confirmation", recipe.OutputPath, (ModeChoice.SelectedItem as ComboBoxItem)?.Content,
+            UiText.Format("Build.Confirmation", recipe.OutputPath, SelectedModeName,
                 recipe.SelectedOptions.Length, recipe.ExpertActions.Length) + "\n" + UpdatePackagesSummary(recipe) +
             (SetupLabels.Legacy(recipe) is { } legacy ? "\n" + legacy : "") + "\n" + CustomMediaSummary(recipe),
             "Build")) return;
@@ -1733,7 +1747,7 @@ public sealed partial class MainWindow : Window
         OutputBox.Text = recipe.OutputPath;
         servicingTool = FindServicingTool();
         applyingMode = true;
-        ModeChoice.SelectedIndex = (int)CleanupCatalog.ModeForRecipe(recipe);
+        ModeChoice.SelectedIndex = ModeIndex(CleanupCatalog.ModeForRecipe(recipe));
         CustomCoreCheck.IsOn = recipe.Flavor == BuildFlavor.Core && SelectedMode == BuildMode.Custom;
         RecipeSelection.ApplyGroups(options, recipe.SelectedOptions);
         applyingMode = false;

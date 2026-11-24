@@ -6,8 +6,8 @@ namespace Tiny11Builder.Core;
 public enum Compression { Recovery, Maximum, Fast }
 public enum CleanupPreset { Balanced, Minimal, Original, Custom }
 public enum BuildFlavor { Regular, Core }
-public enum BuildMode { Tiny11, Tiny11Core, Custom }
-public enum OptionKind { App, Feature, Capability, Policy, File }
+public enum BuildMode { Tiny11, Tiny11Core, Custom, Nano11 }
+public enum OptionKind { App, Feature, Capability, Policy, File, Package }
 public enum PolicyHive { Software, DefaultUser, System }
 public enum ImageItemKind { ProvisionedApp, SystemApp, Feature, Capability, Package, Service, ComponentPayload, FilePayload }
 public enum ExpertActionMode { Disable, Remove }
@@ -22,6 +22,8 @@ public sealed record CleanupOption(
     bool Balanced, bool Minimal, string[] Targets)
 {
     public bool CustomOnly { get; init; }
+    // Preset-only groups that belong to Nano11 and are never part of Tiny11 or Tiny11 Core.
+    public bool NanoOnly { get; init; }
 }
 
 public sealed record WindowsImage(
@@ -130,13 +132,24 @@ public sealed record BuildRecipe
         foreach (var id in SelectedOptions)
             if (!CleanupCatalog.Options.Any(o => o.Id == id))
                 throw new InvalidDataException($"Unknown cleanup option: {id}");
-        if (SelectedOptions.Any(NativePayloadOptions.IsSelected) && (!ExpertAcknowledged || Mode is not (null or BuildMode.Custom)))
-            throw new InvalidDataException("Direct payload groups require Custom and the advanced-risk acknowledgement.");
-        if (Mode is BuildMode.Tiny11 or BuildMode.Tiny11Core &&
-            (Flavor != (Mode == BuildMode.Tiny11Core ? BuildFlavor.Core : BuildFlavor.Regular) ||
+        if (SelectedOptions.Any(NativePayloadOptions.IsSelected))
+        {
+            if (Mode == BuildMode.Nano11)
+            {
+                if (Flavor != BuildFlavor.Core || !CoreAcknowledged)
+                    throw new InvalidDataException("Nano11 payload groups require the Core acknowledgement.");
+            }
+            else if (!ExpertAcknowledged || Mode is not (null or BuildMode.Custom))
+                throw new InvalidDataException("Direct payload groups require Custom and the advanced-risk acknowledgement.");
+        }
+        if (SelectedOptions.Any(CleanupCatalog.IsNanoOnly) && Mode != BuildMode.Nano11 &&
+            (Mode != BuildMode.Custom || Flavor != BuildFlavor.Core || !ExpertAcknowledged))
+            throw new InvalidDataException("Nano11 package, service and payload trimming needs Custom with Core removals and the advanced-risk acknowledgement.");
+        if (Mode is BuildMode.Tiny11 or BuildMode.Tiny11Core or BuildMode.Nano11 &&
+            (Flavor != (Mode is BuildMode.Tiny11Core or BuildMode.Nano11 ? BuildFlavor.Core : BuildFlavor.Regular) ||
              ExpertActions.Length > 0 ||
              !SelectedOptions.ToHashSet(StringComparer.Ordinal).SetEquals(CleanupCatalog.ForMode(Mode.Value))))
-            throw new InvalidDataException("Use Custom for changes to the Tiny11 or Tiny11 Core removal sets.");
+            throw new InvalidDataException("Use Custom for changes to the Tiny11, Tiny11 Core or Nano11 removal sets.");
     }
 
     public static BuildRecipe Read(string path)

@@ -242,9 +242,10 @@ internal static class ResumeSupport
 
     public static string Describe(BuildRecipe recipe)
     {
-        var mode = CleanupCatalog.ModeForRecipe(recipe) switch
+        var recipeMode = CleanupCatalog.ModeForRecipe(recipe);
+        var mode = recipeMode switch
         {
-            BuildMode.Tiny11 => "Tiny11", BuildMode.Tiny11Core => "Tiny11 Core",
+            BuildMode.Tiny11 => "Tiny11", BuildMode.Tiny11Core => "Tiny11 Core", BuildMode.Nano11 => "Nano11",
             _ => UiText.Get(recipe.Flavor == BuildFlavor.Core ? "Resume.CustomCore" : "Mode.Custom")
         };
         var compression = UiText.Get(recipe.Compression switch
@@ -260,6 +261,7 @@ internal static class ResumeSupport
         text.AppendLine();
         text.AppendLine(UiText.Get("Resume.FrozenChoices"));
         if (recipe.Flavor == BuildFlavor.Core) text.AppendLine(UiText.Get("Resume.CoreWarning"));
+        if (recipeMode == BuildMode.Nano11) text.AppendLine(UiText.Get("Resume.NanoWarning"));
         if (SetupLabels.Legacy(recipe) is { } legacy) text.AppendLine(legacy + ".");
         if (recipe.ExpertActions.Length > 0) text.AppendLine(UiText.Get("Resume.ExpertWarning"));
         text.AppendLine();
@@ -276,9 +278,11 @@ internal static class SetupLabels
     public static string? LegacyReason(BuildRecipe recipe)
     {
         if (!SetupInstaller.RequiresLegacy(recipe)) return null;
+        var nano = CleanupCatalog.ModeForRecipe(recipe) == BuildMode.Nano11;
         var core = recipe.Flavor == BuildFlavor.Core;
         var payload = recipe.ExpertActions.Any(a => a.Kind == ImageItemKind.ComponentPayload && a.Mode == ExpertActionMode.Remove);
-        return UiText.FromEnglish(core && payload ? "Core and component-payload removals" : core ? "Core removals" :
+        return UiText.FromEnglish(nano && payload ? "Nano11 and component-payload removals" : nano ? "Nano11 removals" :
+            core && payload ? "Core and component-payload removals" : core ? "Core removals" :
             payload ? "component-payload removals" : "the selected removals");
     }
 

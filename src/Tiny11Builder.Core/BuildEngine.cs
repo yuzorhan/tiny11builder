@@ -180,9 +180,11 @@ public sealed partial class BuildEngine
                 ("Integrate updates", "Integrate selected Windows updates"),
                 ("Custom servicing", "Apply individual servicing actions"), ("Remove apps", "Remove selected apps"),
                 ("Optional features", "Remove optional features and capabilities"),
+                ("Nano packages", "Remove Nano11 system packages"),
                 ("Component cleanup", "Clean superseded component files"), (".NET 3.5", "Include .NET Framework 3.5"),
                 ("Windows settings", "Apply Windows settings"), ("Advanced payloads", "Remove selected payload files"),
-                ("Core pruning", "Trim Core component payloads"), ("Redundant data", "Remove redundant offline data"),
+                ("Core pruning", "Trim Core component payloads"), ("Nano pruning", "Trim Nano11 payloads"),
+                ("Redundant data", "Remove redundant offline data"),
                 ("Commit", "Save image changes"),
                 ("Setup image", "Apply Windows Setup settings"), ("Compress", "Compress the final image"),
                 ("Create ISO", "Create bootable ISO"), ("Verify output", "Verify and publish the ISO")
@@ -192,8 +194,10 @@ public sealed partial class BuildEngine
                 "Integrate updates" => recipe.UpdatePackages.Length > 0,
                 "Custom servicing" => servicingActions.Length > 0,
                 ".NET 3.5" => recipe.EnableNetFx3,
+                "Nano packages" => recipe.SelectedOptions.Contains(CleanupCatalog.NanoIds.Packages),
                 "Component cleanup" => recipe.SelectedOptions.Contains("cleanup") || recipe.Flavor == BuildFlavor.Core,
                 "Core pruning" => recipe.Flavor == BuildFlavor.Core,
+                "Nano pruning" => recipe.SelectedOptions.Contains(CleanupCatalog.NanoIds.Payloads),
                 "Redundant data" => recipe.RemoveRedundantData,
                 "Setup image" => SetupInstaller.RequiresBootEdit(recipe),
                 _ => true
@@ -325,8 +329,22 @@ public sealed partial class BuildEngine
                 if (matching.Length == 0) tracking.Skip("missing-app:" + option.Id, "Remove apps", option.Title, "Not present in this image");
             }
             foreach (var app in appsToRemove)
-                await tracking.RunAsync("app:" + app.PackageName, "Remove apps", $"Remove {app.DisplayName} ({app.PackageName})",
-                    () => dism.RunAsync(token, $"/Image:{mount}", "/Remove-ProvisionedAppxPackage", $"/PackageName:{app.PackageName}")).ConfigureAwait(false);
+            {
+                var appTitle = $"Remove {app.DisplayName} ({app.PackageName})";
+                try
+                {
+                    await tracking.RunAsync("app:" + app.PackageName, "Remove apps", appTitle,
+                        () => dism.RunAsync(token, $"/Image:{mount}", "/Remove-ProvisionedAppxPackage",
+                            $"/PackageName:{app.PackageName}")).ConfigureAwait(false);
+                }
+                catch (DismCommandException error) when (recipe.Mode == BuildMode.Nano11)
+                {
+                    // Nano11 adds apps the other presets never touch, so a refusal is recorded and the build continues.
+                    tracking.Skip("app:" + app.PackageName, "Remove apps", appTitle,
+                        $"DISM refused it (exit code {error.ExitCode}); the app stays in the image.");
+                    session.Warn($"Nano11: {app.PackageName} could not be removed (exit code {error.ExitCode}). Nano11 continued.");
+                }
+            }
             Stage("Optional features", "Detecting actual features and capabilities; unavailable choices are reported, not guessed.");
             var featureOptions = CleanupCatalog.Options.Where(o => o.Kind == OptionKind.Feature && recipe.SelectedOptions.Contains(o.Id)).ToArray();
             var capabilityOptions = CleanupCatalog.Options.Where(o => o.Kind == OptionKind.Capability && recipe.SelectedOptions.Contains(o.Id)).ToArray();
@@ -394,12 +412,20 @@ public sealed partial class BuildEngine
             await RemoveCapabilitiesAsync(session, removalCapabilities.Select(c => c.Identity).ToArray(),
                 recipe.TurboMode, "Optional features", token).ConfigureAwait(false);
             WarnDeferredCapabilities(session);
+            if (recipe.SelectedOptions.Contains(CleanupCatalog.NanoIds.Packages))
+            {
+                Stage("Nano packages", "Removing the Nano11 system packages this build actually contains. Missing or protected packages are recorded, not guessed.");
+                await RemoveNanoPackagesAsync(session, token).ConfigureAwait(false);
+            }
             // DISM refuses cleanup while operations are pending, and .NET 3.5 leaves some until first boot.
             if (recipe.SelectedOptions.Contains("cleanup") || recipe.Flavor == BuildFlavor.Core)
             {
                 Stage("Component cleanup", recipe.Flavor == BuildFlavor.Core ?
                     "Cleaning and resetting the component base before Core payload pruning." : "Cleaning superseded components without ResetBase.");
-                await CleanComponentsAsync(session, token).ConfigureAwait(false);
+                // Nano11 removals can leave uninstall-pending packages behind. Core refuses to prune in that state;
+                // Nano11 keeps going without the pruning instead of failing a build whose packages were already removed.
+                if (NanoPrunes(recipe)) await CleanComponentsForNanoAsync(session, token).ConfigureAwait(false);
+                else await CleanComponentsAsync(session, token).ConfigureAwait(false);
             }
             if (recipe.EnableNetFx3)
             {
@@ -418,12 +444,34 @@ public sealed partial class BuildEngine
                 }).ConfigureAwait(false);
             File.WriteAllText(Path.Combine(staging, "autounattend.xml"), UnattendBuilder.Create(image, recipe));
             Stage("Advanced payloads", "Applying original-builder and expert payload removals to the offline copy only.");
-            if (RemovesComponentPayloads(recipe)) await EnsureNoPendingOperationsAsync(session, token).ConfigureAwait(false);
+            string? payloadPruningBlocked = null;
+            if (RemovesComponentPayloads(recipe))
+            {
+                if (NanoPrunes(recipe))
+                {
+                    try { await EnsureNoPendingOperationsAsync(session, token).ConfigureAwait(false); }
+                    catch (PendingOperationsException error)
+                    {
+                        payloadPruningBlocked = "Nano11 continued without component-file pruning because pending servicing may still reference those files: " + error.Message;
+                        session.Warn(payloadPruningBlocked);
+                    }
+                }
+                else await EnsureNoPendingOperationsAsync(session, token).ConfigureAwait(false);
+            }
             imageOperations.RemoveOriginalFiles(mount, image.Architecture, OriginalFileOptions(session), Log, recipe.TurboMode);
             if (recipe.Flavor == BuildFlavor.Core)
             {
                 Stage("Core pruning", "Trimming Core component payloads and recovery files.");
-                imageOperations.TrimCore(mount, image.Architecture, Log, token, recipe.TurboMode);
+                if (payloadPruningBlocked is null)
+                    imageOperations.TrimCore(mount, image.Architecture, Log, token, recipe.TurboMode);
+                else
+                    session.Tracking.SkipStage(payloadPruningBlocked);
+                if (recipe.SelectedOptions.Contains(CleanupCatalog.NanoIds.Payloads))
+                {
+                    Stage("Nano pruning", "Trimming Nano11 driver, font, speech, input-method and cache payloads.");
+                    if (payloadPruningBlocked is null) imageOperations.TrimNano(mount, image.Architecture, Log, token, recipe.TurboMode);
+                    else session.Tracking.SkipStage(payloadPruningBlocked);
+                }
             }
             imageOperations.ApplyNativeActions(mount, recipe.ExpertActions, Log, recipe.TurboMode);
             if (recipe.RemoveRedundantData)

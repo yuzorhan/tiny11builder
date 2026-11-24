@@ -461,6 +461,58 @@ public sealed class NativeTests(Xunit.Abstractions.ITestOutputHelper output)
     }
 
     [Fact]
+    public void Nano11_trims_printer_drivers_unused_fonts_input_speech_web_and_task_payloads()
+    {
+        using var fixture = new BuildFixture();
+        var mount = CreateOwnedMount(fixture.Root);
+        string File(string relative)
+        {
+            var path = Path.Combine(mount, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            System.IO.File.WriteAllText(path, "fixture");
+            return path;
+        }
+        var drivers = Path.Combine(mount, @"Windows\System32\DriverStore\FileRepository");
+        var removedDriver = Directory.CreateDirectory(Path.Combine(drivers, "prnms001.inf_x")).FullName;
+        var keptDriver = Directory.CreateDirectory(Path.Combine(drivers, "usbhub.inf_x")).FullName;
+        var removedFont = File(@"Windows\Fonts\meiryo.ttc");
+        var removedCjkFont = File(@"Windows\Fonts\msyh.ttc");
+        var keptFont = File(@"Windows\Fonts\arial.ttf");
+        var keptSegoe = File(@"Windows\Fonts\segoeui.ttf");
+        var keptSymbols = File(@"Windows\Fonts\segmdl2.ttf");
+        var removedWeb = File(@"Windows\Web\Wallpaper\img0.jpg");
+        var removedTts = File(@"Windows\Speech\Engines\TTS\ttsengine.dll");
+        var removedTemp = File(@"Windows\Temp\leftover.tmp");
+        var removedNative = File(@"Windows\assembly\NativeImages_v4.0.30319_64\payload.dll");
+        var keptAssembly = File(@"Windows\assembly\GAC_MSIL\keep.dll");
+        var removedTask = File(@"Windows\System32\Tasks\Microsoft\Windows\Application Experience\ProgramDataUpdater");
+        new ImageOperations().TrimNano(mount, "x64", _ => { }, CancellationToken.None);
+        Assert.False(Directory.Exists(removedDriver));
+        Assert.True(Directory.Exists(keptDriver));
+        Assert.False(System.IO.File.Exists(removedFont));
+        Assert.False(System.IO.File.Exists(removedCjkFont));
+        Assert.True(System.IO.File.Exists(keptFont));
+        Assert.True(System.IO.File.Exists(keptSegoe));
+        Assert.True(System.IO.File.Exists(keptSymbols));
+        Assert.False(System.IO.File.Exists(removedWeb));
+        Assert.False(System.IO.File.Exists(removedTts));
+        Assert.False(System.IO.File.Exists(removedTemp));
+        Assert.False(System.IO.File.Exists(removedNative));
+        Assert.True(System.IO.File.Exists(keptAssembly));
+        Assert.False(System.IO.File.Exists(removedTask));
+    }
+
+    [Fact]
+    public void Nano11_trimming_still_refuses_directories_outside_the_owned_mount()
+    {
+        using var fixture = new BuildFixture();
+        var mount = CreateOwnedMount(fixture.Root);
+        var loose = Path.Combine(fixture.Root, "loose");
+        Directory.CreateDirectory(loose);
+        Assert.Throws<InvalidDataException>(() => new ImageOperations().TrimNano(loose, "x64", _ => { }, CancellationToken.None));
+    }
+
+    [Fact]
     public void Core_refuses_an_unknown_runtime_layout_before_pruning_any_payload()
     {
         using var fixture = new BuildFixture();

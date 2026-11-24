@@ -13,6 +13,7 @@ public interface IImageOperations
     void ApplyNativeActions(string mount, IReadOnlyList<ExpertAction> actions, Action<string> log, bool turboMode = false);
     void RemoveOriginalFiles(string mount, string architecture, IReadOnlyList<string> options, Action<string> log, bool turboMode = false);
     void TrimCore(string mount, string architecture, Action<string> log, CancellationToken token, bool turboMode = false);
+    void TrimNano(string mount, string architecture, Action<string> log, CancellationToken token, bool turboMode = false);
     IReadOnlyList<ImageCleanupResult> CleanRedundantData(string mount, Action<string> log, CancellationToken token);
 }
 
@@ -168,6 +169,102 @@ public sealed class ImageOperations : IImageOperations
         }
         Remove(mount, @"Windows\System32\Recovery\winre.wim", log, privilegesEnabled: true, turboMode: turboMode, token: token);
         log("Core: component payloads trimmed. This image is NOT serviceable and has no Windows recovery image.");
+    }
+
+    // Nano11 turns the aggressive parts of the community nano11 script into preset work: print and scanner
+    // driver classes, non-Latin and historic fonts, speech and input-method payloads, help/web assets and the
+    // native-image caches that Core keeps for managed desktop applications.
+    // Driver-store folders are named "<inf>.inf_<architecture>_<hash>", so every pattern ends in a wildcard.
+    private static readonly string[] NanoDriverPrefixes =
+        ["prn*", "scan*", "mfd*", "wscsmd.inf*", "tapdrv.inf*", "rdpbus.inf*", "tdibth.inf*"];
+
+    // Only named non-Latin and historic families are deleted, so Latin text, symbol fonts and the icon
+    // fonts used by shell surfaces keep working.
+    private static readonly string[] NanoFontRemovals =
+    [
+        "segoeuihistoric.ttf", "mingli*", "msjh*", "msyh*", "msjc*", "msyi*", "msxm*", "simsun*", "simhei*",
+        "simkai*", "simfang*", "nsimsun*", "malgun*", "gulim*", "batang*", "meiryo*", "msgothic*", "msmincho*",
+        "mspt*", "yugoth*", "yuanti*", "yumin*", "browallia*", "ebrima*", "gadugi*", "leelaw*", "mangal*",
+        "mvboli*", "nyala*", "plantc*", "raavi*", "shruti*", "tunga*", "vani*", "vijaya*", "kartika*", "latha*",
+        "gautami*", "estrangelo*", "aldhabi*", "urf*", "andlso*", "aparajita*", "kokila*", "utsaah*",
+        "sylfaen*"
+    ];
+
+    private static readonly string[] NanoPayloadPaths =
+    [
+        @"Windows\Web", @"Windows\Help", @"Windows\Cursors",
+        @"Windows\Speech\Engines\TTS",
+        @"Windows\System32\InputMethod\CHS", @"Windows\System32\InputMethod\CHT",
+        @"Windows\System32\InputMethod\JPN", @"Windows\System32\InputMethod\KOR",
+        @"ProgramData\Microsoft\Windows Defender\Definition Updates",
+        @"Windows\System32\Tasks\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+        @"Windows\System32\Tasks\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+        @"Windows\System32\Tasks\Microsoft\Windows\Customer Experience Improvement Program",
+        @"Windows\System32\Tasks\Microsoft\Windows\Chkdsk\Proxy",
+        @"Windows\System32\Tasks\Microsoft\Windows\Windows Error Reporting\QueueReporting",
+        @"Windows\System32\Recovery\winre.wim"
+    ];
+
+    private static bool MatchesName(string name, string pattern) => pattern.EndsWith('*') ?
+        name.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase) :
+        name.Equals(pattern, StringComparison.OrdinalIgnoreCase);
+
+    public void TrimNano(string mount, string architecture, Action<string> log, CancellationToken token, bool turboMode = false)
+    {
+        RequireOwnedMount(mount);
+        using var privileges = new PrivilegeScope();
+        var driverRepository = Path.Combine(mount, @"Windows\System32\DriverStore\FileRepository");
+        if (Directory.Exists(driverRepository))
+        {
+            PathSafety.RejectReparsePoints(driverRepository);
+            foreach (var directory in Directory.EnumerateDirectories(driverRepository).ToArray())
+            {
+                token.ThrowIfCancellationRequested();
+                var name = Path.GetFileName(directory);
+                if (!NanoDriverPrefixes.Any(prefix => MatchesName(name, prefix))) continue;
+                log($"Nano11 driver class: {name}");
+                Remove(mount, Path.GetRelativePath(mount, directory), log, privilegesEnabled: true, turboMode: turboMode, token: token);
+            }
+        }
+        var fonts = Path.Combine(mount, @"Windows\Fonts");
+        if (Directory.Exists(fonts))
+        {
+            PathSafety.RejectReparsePoints(fonts);
+            foreach (var file in Directory.EnumerateFiles(fonts).ToArray())
+            {
+                token.ThrowIfCancellationRequested();
+                var name = Path.GetFileName(file);
+                if (!NanoFontRemovals.Any(pattern => MatchesName(name, pattern))) continue;
+                Remove(mount, Path.GetRelativePath(mount, file), log, privilegesEnabled: true, turboMode: turboMode, token: token);
+            }
+        }
+        foreach (var relative in NanoPayloadPaths)
+        {
+            token.ThrowIfCancellationRequested();
+            Remove(mount, relative, log, privilegesEnabled: true, turboMode: turboMode, token: token);
+        }
+        var temporary = Path.Combine(mount, @"Windows\Temp");
+        if (Directory.Exists(temporary))
+        {
+            PathSafety.RejectReparsePoints(temporary);
+            foreach (var entry in Directory.EnumerateFileSystemEntries(temporary).ToArray())
+            {
+                token.ThrowIfCancellationRequested();
+                Remove(mount, Path.GetRelativePath(mount, entry), log, privilegesEnabled: true, turboMode: turboMode, token: token);
+            }
+        }
+        var assembly = Path.Combine(mount, @"Windows\assembly");
+        if (Directory.Exists(assembly))
+        {
+            PathSafety.RejectReparsePoints(assembly);
+            foreach (var directory in Directory.EnumerateDirectories(assembly).ToArray())
+            {
+                token.ThrowIfCancellationRequested();
+                if (!Path.GetFileName(directory).StartsWith("NativeImages_", StringComparison.OrdinalIgnoreCase)) continue;
+                Remove(mount, Path.GetRelativePath(mount, directory), log, privilegesEnabled: true, turboMode: turboMode, token: token);
+            }
+        }
+        log("Nano11: extra payloads trimmed. Printing, extra fonts, input methods, speech and recovery files are gone.");
     }
 
     internal static void RequireOwnedMount(string mount)

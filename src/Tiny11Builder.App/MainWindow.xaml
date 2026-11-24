@@ -111,10 +111,10 @@
                                 <TextBlock Text="Build modes" FontSize="18" FontWeight="SemiBold" local:Translation.Properties="Text=Text.BuildModes"/>
                                 <Grid x:Name="ModeCards" Grid.Row="1" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="*"/><RowDefinition Height="0"/><RowDefinition Height="0"/>
+                                        <RowDefinition Height="*"/><RowDefinition Height="0"/><RowDefinition Height="0"/><RowDefinition Height="0"/>
                                     </Grid.RowDefinitions>
                                     <Button x:Name="RegularModeCard" Style="{StaticResource ModeCard}" Tag="Tiny11" Click="OnModeCardClick"
                                             AutomationProperties.Name="Tiny11" AutomationProperties.HelpText="Select Tiny11 and choose a Windows ISO." local:Translation.Properties="AutomationProperties.HelpText=Text.SelectTiny11AndChooseAWindowsISO">
@@ -146,7 +146,22 @@
                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}" local:Translation.Properties="Text=Text.ForTestVMsOnly"/>
                                         </Grid>
                                     </Button>
-                                    <Button x:Name="CustomModeCard" Grid.Column="2" Style="{StaticResource ModeCard}" Tag="Custom" Click="OnModeCardClick"
+                                    <Button x:Name="NanoModeCard" Grid.Column="2" Style="{StaticResource ModeCard}" Tag="Nano11" Click="OnModeCardClick"
+                                            AutomationProperties.Name="Nano11" AutomationProperties.HelpText="Select Nano11 and choose a Windows ISO." local:Translation.Properties="AutomationProperties.Name=Mode.Nano11;AutomationProperties.HelpText=Text.SelectNano11AndChooseAWindowsISO">
+                                        <Grid RowSpacing="12">
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                            <FontIcon Glyph="&#xE74B;" FontSize="64" HorizontalAlignment="Left"
+                                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                            <StackPanel Grid.Row="1" Spacing="10">
+                                                <TextBlock Text="Nano11" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" local:Translation.Properties="Text=Mode.Nano11"/>
+                                                <TextBlock Text="Core removals plus extra apps, packages, services, fonts and driver payloads."
+                                                           Style="{StaticResource Secondary}" FontSize="13" TextWrapping="Wrap" local:Translation.Properties="Text=Text.CoreRemovalsPlusExtraAppsPackagesServicesFonts"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Row="2" Text="Smallest build. Test VMs only" FontSize="12" TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource SystemFillColorCautionBrush}" local:Translation.Properties="Text=Text.SmallestBuildTestVMsOnly"/>
+                                        </Grid>
+                                    </Button>
+                                    <Button x:Name="CustomModeCard" Grid.Column="3" Style="{StaticResource ModeCard}" Tag="Custom" Click="OnModeCardClick"
                                             AutomationProperties.Name="Custom" AutomationProperties.HelpText="Select Custom and choose a Windows ISO." local:Translation.Properties="AutomationProperties.Name=Mode.Custom;AutomationProperties.HelpText=Text.SelectCustomAndChooseAWindowsISO">
                                         <Grid RowSpacing="12">
                                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -226,30 +241,36 @@
                         </StackPanel>
                         <StackPanel x:Name="CleanupPanel" Visibility="Collapsed" Spacing="18">
                             <TextBlock Text="Components" Style="{StaticResource PageHeading}" local:Translation.Properties="Text=Text.Components"/>
-                            <TextBlock Text="Choose Tiny11, Tiny11 Core, or select your own removals with Custom. Every change is recorded in the build log." Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.ChooseTiny11Tiny11CoreOrSelectYourOwnRemovals"/>
+                            <TextBlock Text="Choose Tiny11, Tiny11 Core, Nano11, or select your own removals with Custom. Every change is recorded in the build log." Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.ChooseTiny11Tiny11CoreOrSelectYourOwnRemovals"/>
                             <Border Style="{StaticResource Card}">
                                 <StackPanel Spacing="14">
                                     <ComboBox x:Name="ModeChoice" Visibility="Collapsed" SelectionChanged="OnModeChanged" SelectedIndex="0">
                                         <ComboBoxItem Content="Tiny11"/>
                                         <ComboBoxItem Content="Tiny11 Core"/>
+                                        <ComboBoxItem Content="Nano11" local:Translation.Properties="Content=Mode.Nano11"/>
                                         <ComboBoxItem Content="Custom" local:Translation.Properties="Content=Mode.Custom"/>
                                     </ComboBox>
                                     <Grid x:Name="RemovalModeCards" ColumnSpacing="16">
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="0"/><RowDefinition Height="0"/></Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="0"/><RowDefinition Height="0"/><RowDefinition Height="0"/></Grid.RowDefinitions>
                                         <Button x:Name="Tiny11Selection" Style="{StaticResource ModeCard}" MinHeight="140" Click="OnRemovalModeClick" Tag="Tiny11" AutomationProperties.Name="Use Tiny11" local:Translation.Properties="AutomationProperties.Name=Text.UseTiny11">
                                             <StackPanel Spacing="12"><FontIcon Glyph="&#xE7F4;" FontSize="48" HorizontalAlignment="Left"/><TextBlock Text="Tiny11" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="Original removals. Keep update support." Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.OriginalRemovalsKeepUpdateSupport"/></StackPanel>
                                         </Button>
                                         <Button x:Name="CoreSelection" Grid.Column="1" Style="{StaticResource ModeCard}" MinHeight="140" Click="OnRemovalModeClick" Tag="Tiny11Core" AutomationProperties.Name="Use Tiny11 Core" local:Translation.Properties="AutomationProperties.Name=Text.UseTiny11Core">
                                             <StackPanel Spacing="12"><FontIcon Glyph="&#xE8B7;" FontSize="48" HorizontalAlignment="Left"/><TextBlock Text="Tiny11 Core" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="Essentials only. For test VMs." Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.EssentialsOnlyForTestVMs"/></StackPanel>
                                         </Button>
-                                        <Button x:Name="CustomSelection" Grid.Column="2" Style="{StaticResource ModeCard}" MinHeight="140" Click="OnRemovalModeClick" Tag="Custom" AutomationProperties.Name="Use Custom" local:Translation.Properties="AutomationProperties.Name=Text.UseCustom">
+                                        <Button x:Name="NanoSelection" Grid.Column="2" Style="{StaticResource ModeCard}" MinHeight="140" Click="OnRemovalModeClick" Tag="Nano11" AutomationProperties.Name="Use Nano11" local:Translation.Properties="AutomationProperties.Name=Text.UseNano11">
+                                            <StackPanel Spacing="12"><FontIcon Glyph="&#xE74B;" FontSize="48" HorizontalAlignment="Left"/><TextBlock Text="Nano11" FontSize="20" FontWeight="SemiBold" local:Translation.Properties="Text=Mode.Nano11"/><TextBlock Text="Core plus extreme trims. Smallest image." Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.CorePlusExtremeTrimsSmallestImage"/></StackPanel>
+                                        </Button>
+                                        <Button x:Name="CustomSelection" Grid.Column="3" Style="{StaticResource ModeCard}" MinHeight="140" Click="OnRemovalModeClick" Tag="Custom" AutomationProperties.Name="Use Custom" local:Translation.Properties="AutomationProperties.Name=Text.UseCustom">
                                             <StackPanel Spacing="12"><FontIcon Glyph="&#xE713;" FontSize="48" HorizontalAlignment="Left"/><TextBlock Text="Custom" FontSize="20" FontWeight="SemiBold" local:Translation.Properties="Text=Mode.Custom"/><TextBlock Text="Choose individual removals." Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.ChooseIndividualRemovals"/></StackPanel>
                                         </Button>
                                     </Grid>
                                     <TextBlock x:Name="ModeDescription" Style="{StaticResource Secondary}"/>
                                     <InfoBar x:Name="CoreWarning" IsOpen="False" IsClosable="False" Severity="Warning" Title="Core removes update and recovery support."
                                              Message="Core deletes component files and WinRE, and disables Windows Update and Defender. Include updates, languages and features before pruning; you cannot add them afterward. Test the image in a VM." local:Translation.Properties="Title=Text.CoreRemovesUpdateAndRecoverySupport;Message=Text.CoreDeletesComponentFilesAndWinREAndDisablesWindows"/>
+                                    <InfoBar x:Name="NanoWarning" IsOpen="False" IsClosable="False" Severity="Warning" Title="Nano11 removes far more than Core."
+                                             Message="Nano11 also deletes Defender, Search, Hello, BitLocker and TPM packages, the print spooler, non-Latin fonts, speech and input methods, scheduled tasks and help files. Expect a smaller but less capable Windows: no printing, no security center, no extra languages, no recovery and no updates." local:Translation.Properties="Title=Text.Nano11RemovesFarMoreThanCore;Message=Text.Nano11AlsoDeletesDefenderSearchHelloBitLocker"/>
                                     <TextBlock x:Name="CoreConsentStatus" Visibility="Collapsed" Text="You will be asked to accept Core's limitations before continuing." Style="{StaticResource Secondary}" local:Translation.Properties="Text=Core.WillAsk"/>
                                     <TextBlock x:Name="SelectionCount" Style="{StaticResource Secondary}"/>
                                 </StackPanel>
@@ -260,6 +281,8 @@
                                                Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.TheseAreThePresetSConfiguredActionsNotComponents"/>
                                     <TextBlock x:Name="PresetCoreDetails" Visibility="Collapsed" Text="Core also irreversibly prunes component files, removes the recovery environment, and disables Windows Update and Microsoft Defender. Updates selected in Build settings are integrated before pruning; future servicing is not supported."
                                                Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.CoreAlsoIrreversiblyPrunesComponentFilesRemovesTheRecovery"/>
+                                    <TextBlock x:Name="PresetNanoDetails" Visibility="Collapsed" Text="Nano11 additionally removes system packages (Defender, Search, Hello, BitLocker, TPM, printing and accessibility), extra apps and codecs, print/scanner driver folders, non-Latin fonts, speech and input-method payloads, help and web assets, scheduled-task definitions, cached native images, and the print, remote-registry and error-reporting services. Windows Update is disabled by policy, so the image cannot be serviced."
+                                               Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.Nano11AdditionallyRemovesSystemPackagesDefenderSearch"/>
                                     <ItemsControl x:Name="PresetOptionsList" AutomationProperties.Name="Preset removal groups" local:Translation.Properties="AutomationProperties.Name=Text.PresetRemovalGroups">
                                         <ItemsControl.ItemTemplate><DataTemplate>
                                             <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,8">
@@ -287,7 +310,7 @@
                                        Style="{StaticResource Secondary}" local:Translation.Properties="Text=Text.CheckedGroupsAreRemovedOrDisabledUncheckedGroupsAre"/>
                             <ComboBox x:Name="OptionFilter" Header="Show choices" SelectedIndex="0" SelectionChanged="OnOptionFilterChanged" HorizontalAlignment="Stretch" local:Translation.Properties="Header=Text.ShowChoices">
                                 <ComboBoxItem Content="All" Tag="" local:Translation.Properties="Content=Text.All"/><ComboBoxItem Content="Bundled apps" Tag="Bundled apps" local:Translation.Properties="Content=Text.BundledApps"/><ComboBoxItem Content="Optional features" Tag="Optional features" local:Translation.Properties="Content=Stage.Optionalfeatures"/>
-                                <ComboBoxItem Content="Windows settings" Tag="Windows settings" local:Translation.Properties="Content=Stage.Windowssettings"/><ComboBoxItem Content="Advanced / original builder" Tag="Advanced / original builder" local:Translation.Properties="Content=Text.AdvancedOriginalBuilder"/>
+                                <ComboBoxItem Content="Windows settings" Tag="Windows settings" local:Translation.Properties="Content=Stage.Windowssettings"/><ComboBoxItem Content="Advanced / original builder" Tag="Advanced / original builder" local:Translation.Properties="Content=Text.AdvancedOriginalBuilder"/><ComboBoxItem Content="Nano11 / extreme" Tag="Nano11 / extreme" local:Translation.Properties="Content=Text.Nano11Extreme"/>
                             </ComboBox>
                             <ItemsControl x:Name="OptionsList">
                                 <ItemsControl.ItemTemplate>

@@ -66,6 +66,72 @@ public sealed partial class BuildEngine
 
     private static bool HasPendingUpdates(BuildSession s) => s.UpdatePackageStates.Any(item => PendingOperations.IsPending(item.Detail));
 
+    /// <summary>Nano11 removals may leave uninstall-pending packages; those builds degrade instead of stopping.</summary>
+    private static bool NanoPrunes(BuildRecipe recipe) =>
+        recipe.SelectedOptions.Contains(CleanupCatalog.NanoIds.Packages) ||
+        recipe.SelectedOptions.Contains(CleanupCatalog.NanoIds.Payloads);
+
+    private static async Task CleanComponentsForNanoAsync(BuildSession s, CancellationToken token)
+    {
+        try
+        {
+            await CleanComponentsAsync(s, token).ConfigureAwait(false);
+        }
+        catch (PendingOperationsException error)
+        {
+            s.Warn("Nano11 continued without component cleanup: " + error.Message);
+            s.Tracking.SkipStage("Nano11 continued without component cleanup. Pending operations stay pending until first boot.");
+        }
+    }
+
+    /// <summary>
+    /// Removes the packages Nano11 names by prefix, but only the identities this image reports. A protected or
+    /// superseded package that DISM refuses is logged and left in place; the build does not stop for it.
+    /// </summary>
+    private static async Task RemoveNanoPackagesAsync(BuildSession s, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var option = CleanupCatalog.Options.Single(candidate => candidate.Id == CleanupCatalog.NanoIds.Packages);
+        var packages = ImageInventory.ParseIdentityStates(
+            await s.Dism.RunAsync(token, $"/Image:{s.Mount}", "/Get-Packages").ConfigureAwait(false),
+            "Package Identity", ImageItemKind.Package);
+        if (packages.Count == 0)
+        {
+            s.Warn("Nano11: DISM returned no package inventory, so no system package was removed.");
+            s.Tracking.SkipStage("No package inventory was available.");
+            return;
+        }
+        var matches = packages.Where(package => option.Targets.Any(prefix =>
+                package.Identity.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            .DistinctBy(package => package.Identity, StringComparer.OrdinalIgnoreCase).ToArray();
+        foreach (var missing in option.Targets.Where(prefix =>
+                     !packages.Any(package => package.Identity.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))))
+            s.Log($"Nano11: no package matches {missing} in this image.");
+        if (matches.Length == 0)
+        {
+            s.Tracking.SkipStage("None of the Nano11 packages exist in this image.");
+            return;
+        }
+        foreach (var package in matches)
+        {
+            token.ThrowIfCancellationRequested();
+            var id = "nano-package:" + package.Identity;
+            var title = $"Remove package: {package.Identity}";
+            s.Tracking.Plan(id, "Nano packages", title);
+            try
+            {
+                await s.Dism.RunAsync(token, $"/Image:{s.Mount}", "/Remove-Package", $"/PackageName:{package.Identity}",
+                    "/NoRestart").ConfigureAwait(false);
+                s.Tracking.Complete(id);
+            }
+            catch (DismCommandException error)
+            {
+                s.Tracking.Skip(id, "Nano packages", title, $"DISM refused it (exit code {error.ExitCode}); the package stays in the image.");
+                s.Warn($"Nano11: {package.Identity} could not be removed (exit code {error.ExitCode}). Nano11 continued.");
+            }
+        }
+    }
+
     private static string[] DeferredServicingEvidence(BuildSession s) => s.Capabilities.Where(item => item.Deferred)
         .Select(item => $"capability {item.Name}: {item.State}")
         .Concat(s.UpdatePackageStates.Where(item => PendingOperations.IsPending(item.Detail))

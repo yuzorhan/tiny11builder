@@ -80,6 +80,26 @@ public static class PolicyCatalog
             case "reserved-storage":
                 Machine(@"Microsoft\Windows\CurrentVersion\ReserveManager", "ShippedWithReserves", 0);
                 break;
+            case "nano-policies":
+                // Nano11 turns Windows Update off at the policy and service level, and removes the consumer surfaces
+                // that would otherwise reinstall apps after first boot. Values mirror the community nano11 script.
+                Machine(@"Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0);
+                Machine(@"Policies\Microsoft\Windows\WindowsUpdate", "DoNotConnectToWindowsUpdateInternetLocations", 1);
+                Machine(@"Policies\Microsoft\Windows\WindowsUpdate", "DisableWindowsUpdateAccess", 1);
+                Machine(@"Policies\Microsoft\Windows\WindowsUpdate", "WUServer", "localhost");
+                Machine(@"Policies\Microsoft\Windows\WindowsUpdate", "WUStatusServer", "localhost");
+                Machine(@"Policies\Microsoft\Windows\WindowsUpdate", "UpdateServiceUrlAlternate", "localhost");
+                Machine(@"Policies\Microsoft\Windows\WindowsUpdate\AU", "UseWUServer", 1);
+                Machine(@"Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoUpdate", 1);
+                Machine(@"Microsoft\Windows\CurrentVersion\OOBE", "DisableOnline", 1);
+                Machine(@"Policies\Microsoft\Windows\WindowsCopilot", "TurnOffWindowsCopilot", 1);
+                User(@"Software\Policies\Microsoft\Windows\WindowsCopilot", "TurnOffWindowsCopilot", 1);
+                Machine(@"Policies\Microsoft\Teams", "DisableInstallation", 1);
+                Machine(@"Policies\Microsoft\Windows\Windows Mail", "PreventRun", 1);
+                Machine(@"Policies\Microsoft\Windows\Windows Chat", "ChatIcon", 3);
+                Machine(@"Microsoft\PolicyManager\current\device\Start", "ConfigureStartPins", "{\"pinnedList\":[]}");
+                Machine(@"Microsoft\Windows\CurrentVersion\Policies\Explorer", "SettingsPageVisibility", "hide:virus;windowsupdate");
+                break;
             case "device-encryption":
                 values.Add(new(PolicyHive.System, @"{ControlSet}\Control\BitLocker", "PreventDeviceEncryption", 1));
                 break;

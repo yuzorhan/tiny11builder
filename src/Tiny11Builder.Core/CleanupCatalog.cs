@@ -2,6 +2,16 @@ namespace Tiny11Builder.Core;
 
 public static class CleanupCatalog
 {
+    /// <summary>The preset-only Nano11 groups. Engine stages key their work on these ids, not on the mode name.</summary>
+    public static class NanoIds
+    {
+        public const string Packages = "nano-packages";
+        public const string Apps = "nano-apps";
+        public const string Policies = "nano-policies";
+        public const string Services = "nano-services";
+        public const string Payloads = "nano-payloads";
+    }
+
     public static IReadOnlyList<CleanupOption> Options { get; } =
     [
         App("copilot-app", "Copilot apps", "Remove preinstalled Copilot apps. Keep shared runtimes and shell components.", true, true,
@@ -66,6 +76,46 @@ public static class CleanupCatalog
         Policy("hardware-bypass", "Bypass setup hardware requirements", "Set CPU, RAM, TPM, storage and Secure Boot bypass values in setup and Windows. Unsupported hardware may not work.", false, false),
         Policy("reserved-storage", "Disable reserved storage", "Stop reserving disk space for updates. This can leave less space available during servicing.", false, false),
         Policy("device-encryption", "Disable automatic device encryption", "Prevent automatic BitLocker device encryption; do not use if you require encryption by default.", false, false),
+        new(NanoIds.Packages, "Nano11 system packages", "Remove Defender, Search, Hello, BitLocker, TPM, printing, accessibility and legacy optional packages where present. Missing packages are skipped and recorded.", "Nano11 / extreme", OptionKind.Package, false, false,
+            [
+                "Microsoft-Windows-InternetExplorer-Optional-Package",
+                "Microsoft-Windows-MediaPlayer-Package",
+                "Microsoft-Windows-WordPad-FoD-Package",
+                "Microsoft-Windows-StepsRecorder-Package",
+                "Microsoft-Windows-MSPaint-FoD-Package",
+                "Microsoft-Windows-SnippingTool-FoD-Package",
+                "Microsoft-Windows-TabletPCMath-Package",
+                "Microsoft-Windows-Xps-Xps-Viewer-Opt-Package",
+                "Microsoft-Windows-PowerShell-ISE-FOD-Package",
+                "OpenSSH-Client-Package",
+                "Microsoft-Windows-LanguageFeatures-Handwriting",
+                "Microsoft-Windows-LanguageFeatures-OCR",
+                "Microsoft-Windows-LanguageFeatures-Speech",
+                "Microsoft-Windows-LanguageFeatures-TextToSpeech",
+                "Microsoft-Windows-IME-",
+                "Windows-Defender-Client-Package",
+                "Microsoft-Windows-Search-Engine-Client-Package",
+                "Microsoft-Windows-Kernel-LA57-FoD-Package",
+                "Microsoft-Windows-Hello-Face-Package",
+                "Microsoft-Windows-Hello-BioEnrollment-Package",
+                "Microsoft-Windows-BitLocker-DriveEncryption-FVE-Package",
+                "Microsoft-Windows-TPM-WMI-Provider-Package",
+                "Microsoft-Windows-Narrator-App-Package",
+                "Microsoft-Windows-Magnifier-App-Package",
+                "Microsoft-Windows-Printing-PMCPPC-FoD-Package",
+                "Microsoft-Windows-WebcamExperience-Package",
+                "Microsoft-Media-MPEG2-Decoder-Package",
+                "Microsoft-Windows-Wallpaper-Content-Extended-FoD-Package"
+            ]) { NanoOnly = true },
+        new(NanoIds.Apps, "Nano11 extra apps and codecs", "Remove Photos, Notepad, the Windows Security app and optional media extensions. Camera, Paint and Terminal are separate groups.", "Nano11 / extreme", OptionKind.App, false, false,
+            ["Microsoft.Windows.Photos", "Microsoft.WindowsNotepad", "Microsoft.SecHealthUI", "Microsoft.AV1VideoExtension",
+             "Microsoft.AVCEncoderVideoExtension", "Microsoft.HEIFImageExtension", "Microsoft.HEVCVideoExtension",
+             "Microsoft.RawImageExtension", "Microsoft.VP9VideoExtensions", "Microsoft.WebpImageExtension",
+             "Microsoft.Windows.CoreAI", "Microsoft.Windows.PeopleExperienceHost", "Microsoft.SecureAssessmentBrowser",
+             "Microsoft.Windows.CompatibilityEnhancements"]) { NanoOnly = true },
+        new(NanoIds.Policies, "Nano11 privacy and update policies", "Disable telemetry, consumer content, Windows Update access, Copilot and Teams/Outlook installs, and pin an empty Start layout.", "Nano11 / extreme", OptionKind.Policy, false, false, []) { NanoOnly = true },
+        new(NanoIds.Services, "Nano11 services", "Delete print spooler, remote registry, error reporting, compatibility appraiser, map, wallet and Bluetooth support services. Printing and some devices stop working.", "Nano11 / extreme", OptionKind.Policy, false, false, []) { NanoOnly = true },
+        new(NanoIds.Payloads, "Nano11 payload slimming", "Delete printer, scanner and multifunction driver folders, non-Latin fonts, speech engines, input-method folders, help, web assets, cursors, temporary files, native images and scheduled-task definitions.", "Nano11 / extreme", OptionKind.File, false, false, []) { NanoOnly = true },
         NativePayloadOptions.Option("remove-wow64", "32-bit application support", "Remove SysWOW64 and 32-bit shared files. 32-bit applications will not work."),
         NativePayloadOptions.Option("remove-desktop-netfx", "Desktop .NET Framework", "Remove desktop .NET payloads and native-image caches. Managed applications may stop working."),
         NativePayloadOptions.Option("remove-ime-files", "IME input methods", "Remove Asian-language input-method payloads. Keep this group unchecked if you need those input methods."),
@@ -81,7 +131,7 @@ public static class CleanupCatalog
     private static CleanupOption Policy(string id, string title, string description, bool balanced, bool minimal)
         => new(id, title, description, "Windows settings", OptionKind.Policy, balanced, minimal, []);
 
-    public static string[] ForPreset(CleanupPreset preset) => Options.Where(o => !o.CustomOnly)
+    public static string[] ForPreset(CleanupPreset preset) => Options.Where(o => !o.CustomOnly && !o.NanoOnly)
         .Where(o => preset switch
         {
             CleanupPreset.Balanced => o.Balanced,
@@ -91,24 +141,51 @@ public static class CleanupCatalog
         })
         .Select(o => o.Id).ToArray();
 
+    // The Nano11 extras sit on top of the Core set: every Core removal, the groups Core leaves unchecked,
+    // the original-builder payload groups Nano11 always deletes, and its own preset-only groups.
+    private static readonly string[] NanoExtras =
+    [
+        "paint", "camera", "terminal", "oem",
+        "remove-ime-files", "remove-speech-files", "remove-print-drivers", "remove-extra-media"
+    ];
+
     public static string[] ForMode(BuildMode mode) => mode switch
     {
         BuildMode.Tiny11 => ForPreset(CleanupPreset.Original),
-        BuildMode.Tiny11Core => Options.Where(o => o.Minimal || o.Id is
-            "language-extras" or "edge-files" or "onedrive-files" or
-            "hardware-bypass" or "reserved-storage" or "device-encryption")
-            .Select(o => o.Id).ToArray(),
+        BuildMode.Tiny11Core => CoreOptions,
+        BuildMode.Nano11 => NanoOptions(),
         BuildMode.Custom => [],
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
 
+    // Catalog order, like every other mode, so a preset recipe and a re-selected one are identical arrays.
+    private static string[] NanoOptions()
+    {
+        var core = CoreOptions.ToHashSet(StringComparer.Ordinal);
+        var extras = NanoExtras.ToHashSet(StringComparer.Ordinal);
+        return Options.Where(option => option.NanoOnly || core.Contains(option.Id) || extras.Contains(option.Id))
+            .Select(option => option.Id).ToArray();
+    }
+
+    private static string[] CoreOptions => Options.Where(o => !o.NanoOnly && (o.Minimal || o.Id is
+        "language-extras" or "edge-files" or "onedrive-files" or
+        "hardware-bypass" or "reserved-storage" or "device-encryption"))
+        .Select(o => o.Id).ToArray();
+
+    public static bool IsNanoOnly(string id) => Options.Any(option => option.NanoOnly && option.Id == id);
+
     public static BuildMode ModeForRecipe(BuildRecipe recipe)
     {
         if (recipe.Mode is { } mode) return mode;
-        var preset = recipe.Flavor == BuildFlavor.Core ? BuildMode.Tiny11Core : BuildMode.Tiny11;
-        return !recipe.ShrinkBootImage && recipe.ExpertActions.Length == 0 && recipe.IsoSizeLimitBytes is null &&
-            recipe.SelectedOptions.ToHashSet(StringComparer.Ordinal).SetEquals(ForMode(preset))
-            ? preset : BuildMode.Custom;
+        if (recipe.ShrinkBootImage || recipe.ExpertActions.Length > 0 || recipe.IsoSizeLimitBytes is not null)
+            return BuildMode.Custom;
+        var selected = recipe.SelectedOptions.ToHashSet(StringComparer.Ordinal);
+        if (recipe.Flavor == BuildFlavor.Core)
+        {
+            if (selected.SetEquals(ForMode(BuildMode.Nano11))) return BuildMode.Nano11;
+            return selected.SetEquals(ForMode(BuildMode.Tiny11Core)) ? BuildMode.Tiny11Core : BuildMode.Custom;
+        }
+        return selected.SetEquals(ForMode(BuildMode.Tiny11)) ? BuildMode.Tiny11 : BuildMode.Custom;
     }
 
     public static bool MatchesApp(CleanupOption option, ProvisionedApp app) =>

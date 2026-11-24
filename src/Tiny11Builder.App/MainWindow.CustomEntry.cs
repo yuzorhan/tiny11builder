@@ -30,7 +30,7 @@ public sealed partial class MainWindow
         if (choice == ContentDialogResult.Secondary) await LoadRecipeAsync(useCustom: true);
         else if (choice == ContentDialogResult.Primary)
         {
-            ModeChoice.SelectedIndex = (int)Tiny11Builder.Core.BuildMode.Custom;
+            ModeChoice.SelectedIndex = ModeIndex(Tiny11Builder.Core.BuildMode.Custom);
             if (fromWelcome) GoStep(1);
         }
     }

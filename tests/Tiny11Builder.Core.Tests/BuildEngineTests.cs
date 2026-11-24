@@ -48,6 +48,45 @@ public sealed class BuildEngineTests
     }
 
     [Fact]
+    public async Task Nano11_prunes_core_payloads_then_its_own_driver_font_and_cache_payloads()
+    {
+        using var fixture = new BuildFixture();
+        var recipe = fixture.Recipe with
+        {
+            Mode = BuildMode.Nano11, Flavor = BuildFlavor.Core, CoreAcknowledged = true,
+            SelectedOptions = CleanupCatalog.ForMode(BuildMode.Nano11)
+        };
+        var result = await fixture.Engine.BuildAsync(recipe, null, CancellationToken.None);
+        var reset = fixture.Events.FindIndex(e => e.Contains("/ResetBase"));
+        var core = fixture.Events.IndexOf("TrimCore");
+        var nano = fixture.Events.IndexOf("TrimNano");
+        Assert.True(reset >= 0 && core > reset, "Nano11 must reset the component base before Core pruning.");
+        Assert.True(nano > core, "Nano11 payload trimming must follow Core pruning.");
+        Assert.DoesNotContain(fixture.Events.Skip(nano + 1), e => e.Contains("/Cleanup-Image") || e.Contains("/Disable-Feature"));
+        Assert.True(File.Exists(result.IsoPath));
+        Assert.Equal(CleanupCatalog.ForMode(BuildMode.Nano11), fixture.Registry.LastRecipe?.SelectedOptions);
+    }
+
+    [Fact]
+    public async Task Nano11_records_a_refused_system_package_and_still_finishes()
+    {
+        using var fixture = new BuildFixture();
+        fixture.Runner.ExtraPackages.Add("Windows-Defender-Client-Package~31bf3856ad364e35~amd64~~10.0.22621.1");
+        fixture.Runner.FailPackages = true;
+        var recipe = fixture.Recipe with
+        {
+            Mode = BuildMode.Nano11, Flavor = BuildFlavor.Core, CoreAcknowledged = true,
+            SelectedOptions = CleanupCatalog.ForMode(BuildMode.Nano11)
+        };
+        var result = await fixture.Engine.BuildAsync(recipe, null, CancellationToken.None);
+        Assert.Contains(fixture.Runner.Calls, call => call.Contains("/Remove-Package") &&
+            call.Any(argument => argument.Contains("Windows-Defender-Client-Package")));
+        Assert.Contains("TrimNano", fixture.Events);
+        Assert.True(File.Exists(result.IsoPath));
+        Assert.Contains(result.Warnings, warning => warning.Contains("Windows-Defender-Client-Package"));
+    }
+
+    [Fact]
     public async Task Missing_optional_features_are_reported_and_never_guessed()
     {
         using var fixture = new BuildFixture();
@@ -241,6 +280,7 @@ internal sealed class FakeRunner(int build, string architecture, List<string> ev
     public bool FailDiscard { get; set; }
     public Action<IReadOnlyList<string>>? OnCommand { get; set; }
     public List<string> InstalledCapabilities { get; } = ["Language.OCR~~~en-US~0.0.1.0"];
+    public List<string> ExtraPackages { get; } = [];
     public string CapabilityStateAfterRemoval { get; set; } = "Not Present";
     public string FeatureStateAfterRemoval { get; set; } = "Disabled with Payload Removed";
     public bool IgnoreCapabilityRemoval { get; set; }
@@ -338,7 +378,8 @@ internal sealed class FakeRunner(int build, string architecture, List<string> ev
                 $"Capability Identity : {name}\nState : {(removedCapabilities.Contains(name) ? CapabilityStateAfterRemoval : "Installed")}\n"));
             return Result(report + "Capability Identity : Browser.InternetExplorer~~~~0.0.11.0\nState : Not Present\n");
         }
-        if (args.Contains("/Get-Packages")) return Result("Package Identity : Protected-Package~31bf~amd64~~1.0\nState : Installed\n");
+        if (args.Contains("/Get-Packages")) return Result("Package Identity : Protected-Package~31bf~amd64~~1.0\nState : Installed\n" +
+            string.Concat(ExtraPackages.Select(name => $"Package Identity : {name}\nState : Installed\n")));
         if (args.Contains("/Remove-Package") && FailPackages) return Task.FromResult(new ProcessResult(50, "Protected package removal refused"));
         if (executable.EndsWith("oscdimg.exe"))
         {
@@ -388,6 +429,7 @@ internal sealed class FakeOperations(List<string> events) : IImageOperations
     public void ApplyNativeActions(string mount, IReadOnlyList<ExpertAction> actions, Action<string> log, bool turboMode = false) => LastActions = actions;
     public void RemoveOriginalFiles(string mount, string architecture, IReadOnlyList<string> options, Action<string> log, bool turboMode = false) => events.Add("RemoveOriginalFiles");
     public void TrimCore(string mount, string architecture, Action<string> log, CancellationToken token, bool turboMode = false) => events.Add("TrimCore");
+    public void TrimNano(string mount, string architecture, Action<string> log, CancellationToken token, bool turboMode = false) => events.Add("TrimNano");
     public IReadOnlyList<ImageCleanupResult> CleanRedundantData(string mount, Action<string> log, CancellationToken token)
     { events.Add("CleanRedundantData"); return []; }
 }

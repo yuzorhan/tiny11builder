@@ -104,6 +104,7 @@ public sealed class UiRefinementTests
     [Theory]
     [InlineData(BuildMode.Tiny11)]
     [InlineData(BuildMode.Tiny11Core)]
+    [InlineData(BuildMode.Nano11)]
     public void Preset_details_are_the_exact_full_catalog_set_without_claiming_image_availability(BuildMode mode)
     {
         var preview = PresetRemovalPreview.ForMode(mode);
@@ -261,6 +262,26 @@ public sealed class LocalizationCatalogTests
         var chinese = LanguageCatalogs.Resolve("zh-Hans", CultureInfo.GetCultureInfo("en-US"));
         Assert.Contains("21H2", chinese.Get("Text.Windows1121H2OrNewerX64AndARM64Insider"));
         Assert.Contains("21H2", chinese.Get("Text.ChooseAWindows11ClientImage21H2OrNewer"));
+    }
+
+    [Fact]
+    public void Welcome_page_offers_a_nano11_card_and_every_nano_group_is_labelled_in_both_catalogs()
+    {
+        var document = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "Deployment", "MainWindow.xaml"));
+        var cards = document.Descendants().Where(element => element.Attributes("Tag").Any(attribute => attribute.Value == "Nano11")).ToArray();
+        Assert.Equal(2, cards.Length);
+        Assert.All(cards, card => Assert.Equal("Button", card.Name.LocalName));
+        Assert.Equal("Nano11", LanguageCatalogs.English.Get("Mode.Nano11"));
+        var chinese = LanguageCatalogs.Resolve("zh-Hans", CultureInfo.GetCultureInfo("en-US"));
+        Assert.Equal("Nano11", chinese.Get("Mode.Nano11"));
+        Assert.Contains("Nano11", chinese.Get("Text.ChooseTiny11Tiny11CoreOrSelectYourOwnRemovals"));
+        foreach (var option in CleanupCatalog.Options.Where(option => option.NanoOnly))
+        {
+            Assert.True(LanguageCatalogs.English.Contains($"Option.{option.Id}.Title"), option.Id);
+            Assert.True(LanguageCatalogs.English.Contains($"Option.{option.Id}.Description"), option.Id);
+            Assert.True(chinese.Contains($"Option.{option.Id}.Title"), option.Id);
+            Assert.True(chinese.Contains($"Option.{option.Id}.Description"), option.Id);
+        }
     }
 
     [Fact]

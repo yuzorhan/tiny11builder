@@ -105,6 +105,13 @@ public sealed class PortableRecipeTests
             Assert.DoesNotContain(option.Id, CleanupCatalog.ForMode(BuildMode.Tiny11));
             Assert.DoesNotContain(option.Id, CleanupCatalog.ForMode(BuildMode.Tiny11Core));
         });
+        // Nano11's own groups are preset-only: they stay out of Tiny11 and Core and appear only in Nano11.
+        Assert.All(CleanupCatalog.Options.Where(option => option.NanoOnly), option =>
+        {
+            Assert.DoesNotContain(option.Id, CleanupCatalog.ForMode(BuildMode.Tiny11));
+            Assert.DoesNotContain(option.Id, CleanupCatalog.ForMode(BuildMode.Tiny11Core));
+            Assert.Contains(option.Id, CleanupCatalog.ForMode(BuildMode.Nano11));
+        });
     }
 
     [Theory]

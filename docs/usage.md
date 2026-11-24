@@ -19,7 +19,38 @@ unchanged below for compatibility.
 | --- | --- |
 | Tiny11 | The fixed original-style removal set: bundled apps, Edge/WebView2 and OneDrive binaries, hardware-check settings, reserved-storage and automatic-encryption settings. Keeps Update, Defender, WinRE, Store and shared runtimes. Choose Custom to edit removals. |
 | Tiny11 Core | Applies changes before resetting the component base. Keeps common-controls/GDI+/CRT/servicing files, deletes other WinSxS component folders, removes WinRE and disables Windows Update and Defender. These changes cannot be reversed. Use only for test VMs. |
+| Nano11 | Everything Core does, plus the Nano11 preset: extra apps and codecs, system packages (Defender, Search, Hello, BitLocker, TPM, printing, accessibility, legacy accessories), print/scanner driver folders, non-Latin fonts, speech and input-method payloads, help/web assets, cursors, temporary files, native images, scheduled-task definitions, and the print, remote-registry, error-reporting and related services. Windows Update is disabled by policy. The smallest and least capable mode; use only in throwaway test VMs. |
 | Custom | Starts with no removals selected. Choose individual removal groups or list preinstalled apps, protected system apps, optional features, language capabilities, CBS packages, services, drivers and WinSxS component folders. Features and services also offer disable-only. Core's irreversible removals are a separate, unchecked option with the same warning and acknowledgement. |
+
+### Nano11
+
+Nano11 is the community `nano11.ps1` removal profile expressed as a preset
+built on Tiny11 Core. It selects the Core groups, then adds its own:
+`nano-packages` removes system packages by prefix from the identities the image
+actually reports; `nano-apps` removes Photos, Notepad, the Windows Security app
+and optional media extensions; `nano-policies` disables telemetry, consumer
+content, Windows Update access and Copilot, and blocks Teams/Outlook installs;
+`nano-services` deletes the print, remote-registry, error-reporting, appraisal,
+map, wallet and Bluetooth support services; `nano-payloads` deletes print and
+scanner driver folders, non-Latin and historic fonts, speech engines,
+input-method folders, help, web and cursor assets, temporary files, cached
+native images and the data-collection task definitions. Latin text, symbol and
+shell icon fonts are kept, so menus and settings glyphs still render. Nano11 also always
+selects Paint/3D/OneNote, Camera, Terminal, OEM promotional apps and the
+printer, IME, speech and extra-media payload groups that Core leaves unchecked.
+
+Expect a much smaller but clearly reduced Windows: no printing, no Windows
+Security app or Defender, no extra languages, input methods or speech, no
+recovery environment and no servicing. Windows Update is disabled by policy and
+by service start values. Use Nano11 only for disposable test VMs.
+
+A Nano11 build degrades instead of stopping when DISM reports pending
+operations after its package removals: the component cleanup, WinSxS pruning
+and Nano11 payload stage are skipped, the build log says so, and a refused or
+protected package is recorded and left in the image. Core itself still refuses
+to prune in that state, as before. Nano11 is available as a preset; individual
+removal groups remain editable in Custom, where the Nano11 groups require the
+Core removals and the advanced-risk acknowledgement.
 
 The presets are original-style, not command-for-command copies of the scripts.
 Tiny11 cleans superseded components without `/ResetBase`, preserving the
@@ -56,9 +87,10 @@ The six-step wizard provides:
   selection, and automatic read-only native ISO attachment. Windows 11 Pro is
   selected when found; otherwise index 1 is selected. Restored recipes preserve
   their saved edition if it still exists.
-- Three build-mode cards: Tiny11, Tiny11 Core and Custom. Individual keep/remove
-  controls are shown only in Custom. Core requires an explicit agreement dialog
-  before proceeding; cancellation leaves Core unapproved.
+- Four build-mode cards: Tiny11, Tiny11 Core, Nano11 and Custom. Individual
+  keep/remove controls are shown only in Custom. Core and Nano11 require the
+  same explicit agreement dialog before proceeding; cancellation leaves them
+  unapproved.
   A full image inventory requires an upfront expert warning and a separate risk
   acknowledgement before a build.
 - Core and Custom WinSxS/component-payload removals always use the legacy
